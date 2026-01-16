@@ -191,7 +191,7 @@ dummies = pd.get_dummies(df10.location)
 # here we drop one column to avoid dummy variable trap
 # means that if we have n categories then n-1 columns are enough to represent those categories
 # other means locations which we grouped earlier as other and we dont need that column
-df11 = pd.concat([df10, dummies.drop('other', axis='columns')], axis = 'column')
+df11 = pd.concat([df10, dummies.drop('other', axis='columns')], axis='columns')
 
 
 # now we can drop the location column as we have converted it into multiple columns
@@ -249,7 +249,7 @@ def find_best_model_using_gridsearchcv(x, y):
         'linear_regression': {
             'model': LinearRegression(),
             'params': {
-                'normalize': [True, False]
+                'fit_intercept': [True, False]
             }
         },
         'lasso': {
@@ -262,7 +262,7 @@ def find_best_model_using_gridsearchcv(x, y):
         'decision_tree': {
             'model': DecisionTreeRegressor(),
             'params': {
-                'criterion': ['mse', 'friedman_mse'],
+                'criterion': ['squared_error', 'friedman_mse'],
                 'splitter': ['best', 'random']
             }
         }
@@ -293,24 +293,24 @@ def predict_price(location, sqft, bath, bhk):
     # first we find the index of the location column
     loc_index = np.where(x.columns==location)[0][0]
   
-#   this line creates a zero array of length equal to number of columns in df12
+#   this line creates a zero array of length equal to number of columns in x
 # the reason we do this is because our model was trained on all the columns including the dummy variables for locations
 # so when we want to predict for a new data point we need to create an array of same length with all values as 0
 # then we will set the values for sqft, bath, bhk and the location column to 1
-    x = np.zeros(len(df12.columns))
-    # x[0] is sqft how did we got it? because in df12 the first column is total_sqft
-    # x[1] is bath
-    # x[2] is bhk
+    x_input = np.zeros(len(x.columns))
+    # x_input[0] is sqft how did we got it? because in x the first column is total_sqft
+    # x_input[1] is bath
+    # x_input[2] is bhk
     # rest are location dummy variables
-    x[0] = sqft
-    x[1] = bath
-    x[2] = bhk
+    x_input[0] = sqft
+    x_input[1] = bath
+    x_input[2] = bhk
 
     # here we set the value of the location column to 1
     if loc_index >= 0:
-        x[loc_index] = 1
+        x_input[loc_index] = 1
 
-    return reg.predict([x])[0]
+    return reg.predict([x_input])[0]
 
 
 print(predict_price('1st Phase JP Nagar', 1000, 2, 2))
@@ -338,4 +338,3 @@ columns = {
 }
 with open("columns.json", "w") as f:
     f.write(json.dumps(columns))
-    
