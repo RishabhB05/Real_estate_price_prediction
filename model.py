@@ -165,3 +165,177 @@ print(df8.shape)
 
 # now its better
 plot_scatter_chart(df8, "Rajaji Nagar") 
+
+# now we will plot histogram of price per sqft
+plt.hist(df8.price_per_sqft, rwidth=0.8)
+plt.xlabel("Price Per Square Feet")
+plt.ylabel("Count")
+# plt.show()
+
+# we also notice there are bathroom more than bhk so we fix that
+df9 = df8[df8.bath < df8.BHK + 2]
+
+# we drop size and price_per_sqft column as we have extracted all the information from it
+df10 = df9.drop(['size', 'price_per_sqft'], axis='columns')
+
+
+# ----------------------Model Building completed------------------------
+# -----------------------------Creating Dummy Variables------------------------
+
+
+# converting categorical variable location using one hot encoding
+# hot encoding is used to convert categorical variable into numerical variable
+
+dummies = pd.get_dummies(df10.location)
+
+# here we drop one column to avoid dummy variable trap
+# means that if we have n categories then n-1 columns are enough to represent those categories
+# other means locations which we grouped earlier as other and we dont need that column
+df11 = pd.concat([df10, dummies.drop('other', axis='columns')], axis = 'column')
+
+
+# now we can drop the location column as we have converted it into multiple columns
+df12 = df11.drop('location', axis='columns')
+
+# -----------------------------Creating Dummy Variables completed------------------------
+
+
+
+
+
+
+
+
+
+
+# -----------------------------Model Training------------------------
+x = df12.drop('price', axis='columns') #everything except price
+y = df12.price #only price column
+
+# training and testing split
+from sklearn.model_selection import train_test_split
+x_train,x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=10)
+
+from sklearn.linear_model import LinearRegression
+
+reg = LinearRegression()
+reg.fit(x_train, y_train)
+reg.score(x_test, y_test)  # score function will give r^2 value which tells how good our model is
+
+
+# validating the model
+# okay so what this will do is it will split the data into 5 different parts and each time it will take 4 parts as training data and 1 part as testing data
+from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import cross_val_score
+
+# here we are using 5 splits with test size of 20%
+cv = ShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
+# this will give r^2 value for each split
+cross_val_score(LinearRegression(), x, y, cv=cv)
+
+
+# -----------------------------Model Training completed------------------------
+
+# -----------------------------L1 and L2 Regularization------------------------
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import Lasso
+from sklearn.tree import DecisionTreeRegressor
+
+# this function will find the best model using grid search cv
+# it will try different algorithms and different parameters for those algorithms and will return the best model
+
+def find_best_model_using_gridsearchcv(x, y):
+    algos = {
+        'linear_regression': {
+            'model': LinearRegression(),
+            'params': {
+                'normalize': [True, False]
+            }
+        },
+        'lasso': {
+            'model': Lasso(),
+            'params': {
+                'alpha': [1, 2],
+                'selection': ['random', 'cyclic']
+            }
+        },
+        'decision_tree': {
+            'model': DecisionTreeRegressor(),
+            'params': {
+                'criterion': ['mse', 'friedman_mse'],
+                'splitter': ['best', 'random']
+            }
+        }
+    }
+
+    scores = []
+    cv = ShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
+    for algo_name, config in algos.items():
+        gs = GridSearchCV(config['model'], config['params'], cv=5, return_train_score=False)
+        gs.fit(x, y)
+        scores.append({
+            'model': algo_name,
+            'best_score': gs.best_score_,
+            'best_params': gs.best_params_
+        })
+    return pd.DataFrame(scores, columns=['model', 'best_score', 'best_params'])
+
+print(find_best_model_using_gridsearchcv(x, y))
+# we got that linear regression is the best model for this dataset
+
+# -----------------------------L1 and L2 Regularization completed------------------------   
+
+
+
+# -----------------------------PREDICTION ON NEW DATA------------------------
+
+def predict_price(location, sqft, bath, bhk):
+    # first we find the index of the location column
+    loc_index = np.where(x.columns==location)[0][0]
+  
+#   this line creates a zero array of length equal to number of columns in df12
+# the reason we do this is because our model was trained on all the columns including the dummy variables for locations
+# so when we want to predict for a new data point we need to create an array of same length with all values as 0
+# then we will set the values for sqft, bath, bhk and the location column to 1
+    x = np.zeros(len(df12.columns))
+    # x[0] is sqft how did we got it? because in df12 the first column is total_sqft
+    # x[1] is bath
+    # x[2] is bhk
+    # rest are location dummy variables
+    x[0] = sqft
+    x[1] = bath
+    x[2] = bhk
+
+    # here we set the value of the location column to 1
+    if loc_index >= 0:
+        x[loc_index] = 1
+
+    return reg.predict([x])[0]
+
+
+print(predict_price('1st Phase JP Nagar', 1000, 2, 2))
+
+
+# -----------------------------PREDICTION ON NEW DATA completed------------------------ 
+
+
+
+
+
+
+# exporting the model to a pickle file
+# this file can be used in flask app to make predictions
+
+import pickle
+with open('banglore_home_prices_model.pickle', 'wb') as f:
+    pickle.dump(reg, f)
+# we also need to save the columns file which will be used in flask app
+# why do we save the columns file? because when we get the input from user we need to convert it into the same format as our model
+# so we need to know the order of columns and the location columns
+import json
+columns = {
+    'data_columns' : [col.lower() for col in df12.columns]
+}
+with open("columns.json", "w") as f:
+    f.write(json.dumps(columns))
+    
